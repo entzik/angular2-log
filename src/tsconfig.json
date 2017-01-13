@@ -1,17 +1,17 @@
 {
-    "compilerOptions": {
-        "emitDecoratorMetadata": true,
-        "experimentalDecorators": true,
-        "target": "es5",
-        "module": "commonjs",
-        "moduleResolution": "node",
-        "removeComments": true,
-        "sourceMap": true,
-        "outDir": "../lib",
-        "declaration": true
-    },
-    "files": [
-        "./log.service.ts",
-        "./logger.ts"
-  ]
+  "compilerOptions": {
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "target": "es5",
+    "lib": ["es6", "dom"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "removeComments": true,
+    "sourceMap": true,
+    "outDir": "../lib",
+    "declaration": true,
+    "typeRoots": [
+      "../node_modules/@types"
+    ]
+  }
 }

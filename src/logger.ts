@@ -1,92 +1,131 @@
-import {Subject} from 'rxjs/Rx'
+import { Headers, Http } from '@angular/http';
+import { EventEmitter } from '@angular/core';
+import { AsyncSubject, Subject } from 'rxjs/Rx';
+import { RequestOptionsArgs } from '@angular/http/src/interfaces';
+
+import { LogLevel, LevelNames } from './log-level';
+
+const SERVER_LOG_ENDPOINT: string = '/api/webuilogbridge/v1/log';
 
 export interface Notification {
     type: string;
-    payload: {
-        level?: string;
-    };
+    payload: any;
 }
 
-export var Level = {
-    debug: 1,
-    info: 2,
-    warning: 3,
-    error: 4,
-    mute:5
+interface LogRequest {
+    level: number,
+    mesage: string
 }
 
+interface ServerLogRequest {
+    application: string,
+    lines: LogRequest[]
+}
 
 export class Logger {
+    private logTopicSubject: EventEmitter<LogRequest> = null;
+    serverSide: boolean = false;
+    level: number = LogLevel.info;
 
-    subject = null;
-    level: number = Level.info;
+    constructor(
+        public name: string,
+        private http: Http
+    ) {
+        this.logTopicSubject = new EventEmitter<LogRequest>(true);
+        this.logTopicSubject.asObservable().bufferTime(1000).subscribe((payload: LogRequest[]) => {
+            payload.forEach((request: LogRequest) => {
+                let t = [];
+                switch (request.level) {
+                    case LogLevel.debug: {
+                        t.push(...["%s | %cDebug: ", this.name, "color:green"]);
+                    } break;
 
-    constructor(public name: string) {
-        // Create the RxJs subject
-        this.subject = new Subject();
+                    case LogLevel.warn: {
+                        t.push(...["%s | %cWarning: ", this.name, "color:orange"]);
+                    } break;
+
+                    case LogLevel.info: {
+                        t.push(...["%s | %cInfo: ", this.name, "color:blue"]);
+                    } break;
+
+                    case LogLevel.error: {
+                        t.push(...["%s | %cError: ", this.name, "color:red"]);
+                    } break;
+                }
+                t.push(request.mesage);
+                console.log.apply(console, t);
+            });
+            if (this.serverSide) {
+                let jwt: string = sessionStorage.getItem('jwt');
+                let application: string = sessionStorage.getItem('application-name');
+
+                let headers: Headers = new Headers();
+                headers.append('Authorization', `Bearer jwt` + jwt);
+                let reqOptions: RequestOptionsArgs = <RequestOptionsArgs>{
+                    headers: headers,
+                };
+                this.http.post(SERVER_LOG_ENDPOINT, JSON.stringify(<ServerLogRequest>{
+                    application: application,
+                    lines: payload,
+                }), reqOptions);
+            }
+
+        })
     }
 
-    closePublication() {
-        this.subject.onCompleted();
+    public closePublication() {
+        this.logTopicSubject.complete();
     }
 
-    onServiceNotification( notif: Notification ) {
-        if( notif.type === "LEVEL" ) {
-            this.level= Level[notif.payload.level];
-            console.log( this.level );
+    public getLevelName(): string {
+        return LevelNames[this.level];
+    }
+
+    onServiceNotification(notif: Notification) {
+        if (notif.type === 'LEVEL') {
+            this.level = LogLevel[notif.payload];
+        } else if (notif.type === 'SERVER_SIDE') {
+            this.serverSide = notif.payload;
         }
     };
 
-    debug(...args) {
-        if( this.level > Level.debug ) {
+    debug(contentProvider: () => string) {
+        if (this.level > LogLevel.debug) {
             return;
-        }
-
-        var t = ["%s | %cDebug: ", this.name, "color:green"];
-        t.push(...args);
-        console.log.apply(console, t);
-        // Publish an event
-        this._publishEvent('debug', args);
+        } else
+            this.logTopicSubject.emit(<LogRequest>{
+                level: LogLevel.debug,
+                mesage: contentProvider()
+            })
     }
 
-    info(...args) {
-        if( this.level > Level.info ) {
+    info(contentProvider: () => string) {
+        if (this.level > LogLevel.info) {
             return;
-        }
-
-        var t = ["%s | %cInfo: ", this.name, "color:blue"];
-        t.push(...args);
-        console.log.apply(console, t);
-        // Publish an event
-        this._publishEvent('info', args);
+        } else
+            this.logTopicSubject.emit(<LogRequest>{
+                level: LogLevel.info,
+                mesage: contentProvider()
+            })
     }
 
-    warning(...args) {
-        if( this.level > Level.warning ) {
+    warn(contentProvider: () => string) {
+        if (this.level > LogLevel.warn) {
             return;
-        }
-
-        var t = ["%s | %cWarning: ", this.name, "color:orange"];
-        t.push(...args);
-        console.log.apply(console, t);
-        // Publish an event
-        this._publishEvent('warning', args);
+        } else
+            this.logTopicSubject.emit(<LogRequest>{
+                level: LogLevel.warn,
+                mesage: contentProvider()
+            })
     }
 
-    error(...args) {
-        if( this.level > Level.error ) {
+    error(contentProvider: () => string) {
+        if (this.level > LogLevel.error) {
             return;
-        }
-
-        var t = ["%s | %cError: ", this.name, "color:red"];
-        t.push(...args);
-        console.log.apply(console, t);
-        // Publish an event
-        this._publishEvent('error', args);
+        } else
+            this.logTopicSubject.emit(<LogRequest>{
+                level: LogLevel.error,
+                mesage: contentProvider()
+            })
     }
-
-    private _publishEvent(level, ...args) {
-        this.subject.next({ name: this.name, level, value: args });
-    }
-
 }
